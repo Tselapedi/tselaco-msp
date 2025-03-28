@@ -1,0 +1,120 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: tselaco_msp_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test database
+        run: node scripts/setup-test-db.js
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_USER: root
+          DATABASE_PASSWORD: root
+          DATABASE_NAME: tselaco_msp_test
+
+      - name: Run database migrations
+        run: npm run db:push
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_USER: root
+          DATABASE_PASSWORD: root
+          DATABASE_NAME: tselaco_msp_test
+
+      - name: Run tests
+        run: npm test
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_USER: root
+          DATABASE_PASSWORD: root
+          DATABASE_NAME: tselaco_msp_test
+          JWT_SECRET: test_jwt_secret_key_123
+          SMTP_HOST: smtp.example.com
+          SMTP_PORT: 587
+          SMTP_USER: test@example.com
+          SMTP_PASS: test_password
+          SMTP_FROM: noreply@tselacomsp.com
+
+      - name: Run test coverage
+        run: npm run test:coverage
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_USER: root
+          DATABASE_PASSWORD: root
+          DATABASE_NAME: tselaco_msp_test
+          JWT_SECRET: test_jwt_secret_key_123
+          SMTP_HOST: smtp.example.com
+          SMTP_PORT: 587
+          SMTP_USER: test@example.com
+          SMTP_PASS: test_password
+          SMTP_FROM: noreply@tselacomsp.com
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/coverage-final.json
+          fail_ci_if_error: true
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+          DATABASE_USER: ${{ secrets.DATABASE_USER }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+
+      - name: Deploy to production
+        run: |
+          # Add your deployment commands here
+          # Example: Deploy to Vercel
+          npx vercel --prod
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

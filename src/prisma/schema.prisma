@@ -1,0 +1,107 @@
+// This is your Prisma schema file
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  PASSENGER
+  DRIVER
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RideStatus {
+  REQUESTED
+  ACCEPTED
+  STARTED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  role          UserRole  @default(PASSENGER)
+  firstName     String
+  lastName      String
+  phoneNumber   String    @unique
+  idNumber      String?   @unique // South African ID number
+  dateOfBirth   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+
+  // Relationships
+  passengerRides Ride[]   @relation("PassengerRides")
+  driverRides    Ride[]   @relation("DriverRides")
+  driverProfile  Driver?
+  documents      Document[]
+}
+
+model Driver {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  user              User               @relation(fields: [userId], references: [id])
+  verificationStatus VerificationStatus @default(PENDING)
+  vehicleType       String
+  vehicleMake       String
+  vehicleModel      String
+  vehicleYear       Int
+  licensePlate      String
+  isAvailable       Boolean            @default(false)
+  currentLocation   Json?              // Stores lat/lng as JSON
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model Document {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  type        String    // e.g., "driver_license", "vehicle_registration", "id_document"
+  fileUrl     String
+  status      VerificationStatus @default(PENDING)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Ride {
+  id            String      @id @default(cuid())
+  passengerId   String
+  passenger     User        @relation("PassengerRides", fields: [passengerId], references: [id])
+  driverId      String?
+  driver        User?       @relation("DriverRides", fields: [driverId], references: [id])
+  status        RideStatus  @default(REQUESTED)
+  pickupLocation Json
+  dropoffLocation Json
+  price         Decimal
+  distance      Decimal
+  duration      Int         // in minutes
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  startedAt     DateTime?
+  completedAt   DateTime?
+}
+
+// For storing temporary verification codes
+model VerificationCode {
+  id        String   @id @default(cuid())
+  code      String
+  email     String
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
